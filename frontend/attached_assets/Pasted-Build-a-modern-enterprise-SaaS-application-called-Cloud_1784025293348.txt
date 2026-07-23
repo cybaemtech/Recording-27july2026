@@ -1,0 +1,213 @@
+Build a modern enterprise SaaS application called "Cloud Session Recorder".
+
+The application architecture should be designed from the beginning to support:
+
+• Electron Desktop Agent (Windows & macOS)
+• React Admin Dashboard
+• Node.js Backend API
+• PostgreSQL Database
+• Cloud Storage Integration (do not implement storage yet, only architecture)
+
+This is NOT a screen recorder yet.
+This is the backend and dashboard platform that the desktop recorder will communicate with.
+
+=================================================
+
+TECH STACK
+
+Frontend:
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Shadcn UI
+- React Router
+- TanStack Query
+
+Backend:
+- Node.js
+- Express
+- TypeScript
+
+Database:
+- PostgreSQL
+
+Authentication:
+- JWT
+
+=================================================
+
+Create a beautiful professional dashboard similar to Linear, Notion, Slack Admin or modern SaaS products.
+
+Dark mode by default.
+
+Primary color:
+Blue
+
+=================================================
+
+SIDEBAR
+
+Dashboard
+
+Sessions
+
+Users
+
+Devices
+
+Storage
+
+Reports
+
+Settings
+
+=================================================
+
+Dashboard should contain professional statistic cards:
+
+Total Users
+
+Online Users
+
+Active Recording Sessions
+
+Today's Sessions
+
+Cloud Storage Used
+
+Failed Uploads
+
+=================================================
+
+Recent Sessions Table
+
+Columns
+
+User
+
+Device Name
+
+Operating System
+
+Login Time
+
+Logout Time
+
+Duration
+
+Recording Size
+
+Upload Status
+
+Actions
+
+Play
+
+Download
+
+Delete
+
+=================================================
+
+Session Detail Page
+
+Show
+
+User
+
+Email
+
+Device
+
+Operating System
+
+Session ID
+
+Login Time
+
+Logout Time
+
+Duration
+
+Recording Size
+
+Cloud URL (placeholder)
+
+Upload Status
+
+Recording Status
+
+=================================================
+
+Database architecture should already support future Electron integration.
+
+Create tables for:
+
+Users
+
+Devices
+
+Sessions
+
+Recordings
+
+AuditLogs
+
+=================================================
+
+Each Session should include:
+
+Session ID
+
+User ID
+
+Device ID
+
+Login Time
+
+Logout Time
+
+Duration
+
+Recording Size
+
+Recording URL
+
+Upload Status
+
+Recording Status
+
+Created At
+
+Updated At
+
+=================================================
+
+Backend APIs
+
+POST /login
+
+GET /dashboard
+
+GET /sessions
+
+GET /session/:id
+
+GET /users
+
+GET /devices
+
+DELETE /session/:id
+
+=================================================
+
+For now generate realistic dummy data.
+
+Everything should be modular and production-ready.
+
+Do NOT implement screen recording yet.
+
+The architecture must make adding the Electron desktop recorder easy in Phase 2.
+
+Build the UI as if this product will be sold to enterprise companies with 200+ employees.

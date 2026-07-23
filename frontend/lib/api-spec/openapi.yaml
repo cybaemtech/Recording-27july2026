@@ -1,0 +1,698 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Cloud Session Recorder API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: dashboard
+    description: Dashboard stats
+  - name: sessions
+    description: Recording sessions
+  - name: users
+    description: Users
+  - name: devices
+    description: Devices
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all sessions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: userId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionListResponse"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Session not found
+    delete:
+      operationId: deleteSession
+      tags: [sessions]
+      summary: Delete a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Session not found
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /users/invite:
+    post:
+      operationId: inviteUser
+      tags: [users]
+      summary: Invite a user with agent download link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteUserInput"
+      responses:
+        "200":
+          description: Invitation sent successfully
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDetail"
+        "404":
+          description: User not found
+
+  /devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: List all devices
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: userId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: os
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceListResponse"
+
+  /devices/{id}:
+    get:
+      operationId: getDevice
+      tags: [devices]
+      summary: Get device by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Device detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceDetail"
+        "404":
+          description: Device not found
+
+  /reports/activity:
+    get:
+      operationId: getActivityReport
+      tags: [dashboard]
+      summary: Get activity report (sessions per day for last 30 days)
+      responses:
+        "200":
+          description: Activity report
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityDataPoint"
+
+  /reports/storage:
+    get:
+      operationId: getStorageReport
+      tags: [dashboard]
+      summary: Get storage usage breakdown by OS
+      responses:
+        "200":
+          description: Storage usage breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StorageDataPoint"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    InviteUserInput:
+      type: object
+      required: [email, platform]
+      properties:
+        email:
+          type: string
+        platform:
+          type: string
+          enum: [windows, mac]
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserSummary"
+
+    DashboardStats:
+      type: object
+      required:
+        - totalUsers
+        - onlineUsers
+        - activeRecordingSessions
+        - todaysSessions
+        - cloudStorageUsedBytes
+        - failedUploads
+      properties:
+        totalUsers:
+          type: integer
+        onlineUsers:
+          type: integer
+        activeRecordingSessions:
+          type: integer
+        todaysSessions:
+          type: integer
+        cloudStorageUsedBytes:
+          type: integer
+        failedUploads:
+          type: integer
+
+    Session:
+      type: object
+      required:
+        - id
+        - userId
+        - deviceId
+        - loginTime
+        - uploadStatus
+        - recordingStatus
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        deviceId:
+          type: integer
+        loginTime:
+          type: string
+          format: date-time
+        logoutTime:
+          type: ["string", "null"]
+          format: date-time
+        durationSeconds:
+          type: ["integer", "null"]
+        recordingSizeBytes:
+          type: ["integer", "null"]
+        recordingUrl:
+          type: ["string", "null"]
+        uploadStatus:
+          type: string
+          enum: [pending, uploading, completed, failed]
+        recordingStatus:
+          type: string
+          enum: [active, paused, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SessionDetail:
+      type: object
+      required:
+        - id
+        - userId
+        - deviceId
+        - loginTime
+        - uploadStatus
+        - recordingStatus
+        - createdAt
+        - updatedAt
+        - user
+        - device
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        deviceId:
+          type: integer
+        loginTime:
+          type: string
+          format: date-time
+        logoutTime:
+          type: ["string", "null"]
+          format: date-time
+        durationSeconds:
+          type: ["integer", "null"]
+        recordingSizeBytes:
+          type: ["integer", "null"]
+        recordingUrl:
+          type: ["string", "null"]
+        uploadStatus:
+          type: string
+          enum: [pending, uploading, completed, failed]
+        recordingStatus:
+          type: string
+          enum: [active, paused, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        device:
+          $ref: "#/components/schemas/DeviceSummary"
+
+    SessionWithRelations:
+      type: object
+      required:
+        - id
+        - userId
+        - deviceId
+        - loginTime
+        - uploadStatus
+        - recordingStatus
+        - createdAt
+        - updatedAt
+        - user
+        - device
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        deviceId:
+          type: integer
+        loginTime:
+          type: string
+          format: date-time
+        logoutTime:
+          type: ["string", "null"]
+          format: date-time
+        durationSeconds:
+          type: ["integer", "null"]
+        recordingSizeBytes:
+          type: ["integer", "null"]
+        recordingUrl:
+          type: ["string", "null"]
+        uploadStatus:
+          type: string
+          enum: [pending, uploading, completed, failed]
+        recordingStatus:
+          type: string
+          enum: [active, paused, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        device:
+          $ref: "#/components/schemas/DeviceSummary"
+
+    SessionListResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionWithRelations"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    UserSummary:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+
+    User:
+      type: object
+      required: [id, name, email, role, isOnline, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, user]
+        isOnline:
+          type: boolean
+        avatarUrl:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        lastSeenAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserDetail:
+      type: object
+      required: [id, name, email, role, isOnline, createdAt, updatedAt, deviceCount, sessionCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, user]
+        isOnline:
+          type: boolean
+        avatarUrl:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        lastSeenAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deviceCount:
+          type: integer
+        sessionCount:
+          type: integer
+
+    UserListResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    DeviceSummary:
+      type: object
+      required: [id, name, operatingSystem]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        operatingSystem:
+          type: string
+
+    Device:
+      type: object
+      required: [id, userId, name, operatingSystem, isOnline, agentVersion, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        operatingSystem:
+          type: string
+          enum: [Windows, macOS, Linux]
+        isOnline:
+          type: boolean
+        agentVersion:
+          type: ["string", "null"]
+        lastSeenAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DeviceDetail:
+      type: object
+      required: [id, userId, name, operatingSystem, isOnline, agentVersion, createdAt, updatedAt, user, sessionCount]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        operatingSystem:
+          type: string
+          enum: [Windows, macOS, Linux]
+        isOnline:
+          type: boolean
+        agentVersion:
+          type: ["string", "null"]
+        lastSeenAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        sessionCount:
+          type: integer
+
+    DeviceListResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Device"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    ActivityDataPoint:
+      type: object
+      required: [date, sessionCount, recordingCount]
+      properties:
+        date:
+          type: string
+        sessionCount:
+          type: integer
+        recordingCount:
+          type: integer
+
+    StorageDataPoint:
+      type: object
+      required: [os, storageBytes, sessionCount]
+      properties:
+        os:
+          type: string
+        storageBytes:
+          type: integer
+        sessionCount:
+          type: integer
