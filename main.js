@@ -242,44 +242,64 @@ app.whenReady().then(() => {
           userId = devices[0].user_id;
           logToFile(`[Supabase Sync] Found existing device id: ${deviceId} assigned to user_id: ${userId}`);
         } else {
-          // Device doesn't exist yet: find primary user (by ascending ID order)
-          logToFile(`[Supabase Sync] Device not found. Resolving primary user...`);
-          const userFetchUrl = `${SUPABASE_URL}/rest/v1/users?select=id&order=id.asc&limit=1`;
-          const userFetchRes = await supabaseFetch(userFetchUrl, {
+          // Device doesn't exist yet: resolve matching user for this computer
+          const osUser = (os.userInfo() ? os.userInfo().username : hostname).toLowerCase();
+          logToFile(`[Supabase Sync] Device not found. Resolving user matching local OS user '${osUser}' or invited users...`);
+
+          // 1. Check if user exists matching local OS username or hostname
+          const userSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&or=(email.ilike.*${encodeURIComponent(osUser)}*,name.ilike.*${encodeURIComponent(osUser)}*)&limit=1`;
+          const userSearchRes = await supabaseFetch(userSearchUrl, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
               "apikey": SUPABASE_ANON_KEY,
             }
-          }, "User lookup");
+          }, "User search");
 
-          const existingUsers = await userFetchRes.json();
-          if (existingUsers && existingUsers.length > 0) {
-            userId = existingUsers[0].id;
-            logToFile(`[Supabase Sync] Found primary user with id: ${userId}`);
+          const matchedUsers = await userSearchRes.json();
+          if (matchedUsers && matchedUsers.length > 0) {
+            userId = matchedUsers[0].id;
+            logToFile(`[Supabase Sync] Matched user '${matchedUsers[0].name}' (${matchedUsers[0].email}) with id: ${userId}`);
           } else {
-            // Create default user if users table is empty
-            logToFile(`[Supabase Sync] No user found, creating default user...`);
-            const createUserUrl = `${SUPABASE_URL}/rest/v1/users`;
-            const createUserRes = await supabaseFetch(createUserUrl, {
-              method: "POST",
+            // 2. Check for recent invited users (role = 'user')
+            const invitedSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&role=eq.user&order=id.desc&limit=1`;
+            const invitedSearchRes = await supabaseFetch(invitedSearchUrl, {
+              method: "GET",
               headers: {
                 "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
                 "apikey": SUPABASE_ANON_KEY,
-                "Content-Type": "application/json",
-                "Prefer": "return=representation"
-              },
-              body: JSON.stringify({
-                name: "Default User",
-                email: "default@agent.local",
-                password_hash: "agent-created",
-                role: "user",
-                is_online: true
-              })
-            }, "User creation");
-            const newUsers = await createUserRes.json();
-            userId = newUsers[0].id;
-            logToFile(`[Supabase Sync] Created default user with id: ${userId}`);
+              }
+            }, "Invited user lookup");
+            const invitedUsers = await invitedSearchRes.json();
+
+            if (invitedUsers && invitedUsers.length > 0) {
+              userId = invitedUsers[0].id;
+              logToFile(`[Supabase Sync] Assigned to recent invited user '${invitedUsers[0].name}' (${invitedUsers[0].email}) with id: ${userId}`);
+            } else {
+              // 3. Create user profile for this OS user
+              const formattedName = osUser.replace(/[\._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              logToFile(`[Supabase Sync] Creating user profile for '${formattedName}'...`);
+              const createUserUrl = `${SUPABASE_URL}/rest/v1/users`;
+              const createUserRes = await supabaseFetch(createUserUrl, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                  "apikey": SUPABASE_ANON_KEY,
+                  "Content-Type": "application/json",
+                  "Prefer": "return=representation"
+                },
+                body: JSON.stringify({
+                  name: formattedName,
+                  email: `${osUser.replace(/[^a-z0-9]/g, '')}@cybaemtech.com`,
+                  password_hash: "agent-created",
+                  role: "user",
+                  is_online: true
+                })
+              }, "User creation");
+              const newUsers = await createUserRes.json();
+              userId = newUsers[0].id;
+              logToFile(`[Supabase Sync] Created user '${formattedName}' with id: ${userId}`);
+            }
           }
 
           // Create new device under resolved user
