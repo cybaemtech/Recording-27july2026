@@ -231,7 +231,35 @@ async function initializeLiveSessionAndDevice() {
   }
 }
 
-// Function to capture open window tabs & apps and post audit logs
+let activeTabState = {};
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  return `${h}h ${remM}m`;
+}
+
+function detectWebsiteName(title, proc) {
+  const t = title.toLowerCase();
+  if (t.includes("chatgpt") || t.includes("openai")) return "ChatGPT (chatgpt.com)";
+  if (t.includes("github")) return "GitHub (github.com)";
+  if (t.includes("google search") || t.includes("google")) return "Google Search";
+  if (t.includes("youtube")) return "YouTube (youtube.com)";
+  if (t.includes("stack overflow")) return "Stack Overflow";
+  if (t.includes("outlook") || t.includes("mail")) return "Outlook Email";
+  if (t.includes("teams")) return "Microsoft Teams";
+  if (t.includes("figma")) return "Figma";
+  if (t.includes("excel") || proc.toLowerCase().includes("excel")) return "Microsoft Excel";
+  if (t.includes("word") || proc.toLowerCase().includes("winword")) return "Microsoft Word";
+  if (t.includes("code") || proc.toLowerCase().includes("code")) return "VS Code";
+  return `${proc} (${title.slice(0, 30)})`;
+}
+
+// Function to capture open window tabs & apps, calculate exact time used per website, and submit audit logs
 async function captureAndLogOpenTabs(userInfo, hostname, eventTime, actionName) {
   try {
     const { execFile } = require("child_process");
@@ -245,18 +273,29 @@ async function captureAndLogOpenTabs(userInfo, hostname, eventTime, actionName) 
         let windows = JSON.parse(stdout);
         if (!Array.isArray(windows)) windows = [windows];
 
-        const timeInStr = new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-        const timeOutStr = new Date(Date.now() + 10000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-        
-        // Find user name
         const userLabel = userInfo?.userId ? `User #${userInfo.userId}` : `Agent User (${hostname})`;
+        const currentNow = Date.now();
 
         for (const w of windows) {
           if (!w.MainWindowTitle || w.MainWindowTitle.trim().length === 0) continue;
           
           const title = w.MainWindowTitle.trim();
           const proc = w.ProcessName || "Application";
-          const detailsStr = `Open Tab/App: "${title}" (${proc}) | Time In: ${timeInStr} - Time Out: ${timeOutStr} (Active)`;
+          const websiteLabel = detectWebsiteName(title, proc);
+          const key = `${proc}_${title}`;
+
+          if (!activeTabState[key]) {
+            activeTabState[key] = { startTime: currentNow, title, proc, websiteLabel };
+          }
+
+          const activeInfo = activeTabState[key];
+          const timeUsedSec = Math.max(1, Math.floor((currentNow - activeInfo.startTime) / 1000));
+          const timeUsedFormatted = formatDuration(timeUsedSec);
+
+          const timeInStr = new Date(activeInfo.startTime).toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+          const timeOutStr = new Date(currentNow).toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+
+          const detailsStr = `Website/Tab: "${title}" (${websiteLabel}) | Time In: ${timeInStr} - Time Out: ${timeOutStr} | Time Used: ${timeUsedFormatted}`;
 
           // Submit to backend API audit log
           try {
@@ -267,8 +306,8 @@ async function captureAndLogOpenTabs(userInfo, hostname, eventTime, actionName) 
                 user: userLabel,
                 role: "User",
                 deviceName: hostname,
-                module: "Applications & Tabs",
-                action: actionName || "Tab Open",
+                module: "Website & Tab Activity",
+                action: "Website / Tab Usage",
                 status: "success",
                 details: detailsStr
               })
