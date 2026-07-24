@@ -191,9 +191,12 @@ async function initializeLiveSessionAndDevice() {
       logToFile(`[Supabase Live Sync] 🟢 Live session active in DB! Session ID: ${currentActiveSessionId}`);
     }
 
-    // 3. Start Heartbeat Timer (Updates duration & last_seen every 10s)
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    // Log Initial Audit Entry for session start with open tabs
     const startTime = Date.now();
+    captureAndLogOpenTabs({ userId, deviceId }, hostname, startTime, "Agent Started & Recording");
+
+    // 3. Start Heartbeat Timer (Updates duration, last_seen & active window tabs every 10s)
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
     heartbeatInterval = setInterval(async () => {
       if (!isRecording || !currentActiveSessionId) return;
       const currentDuration = Math.floor((Date.now() - startTime) / 1000);
@@ -213,6 +216,9 @@ async function initializeLiveSessionAndDevice() {
             body: JSON.stringify({ is_online: true, last_seen_at: new Date().toISOString() })
           }, "Device heartbeat");
         }
+
+        // Capture open window tabs & apps periodically
+        captureAndLogOpenTabs({ userId, deviceId }, hostname, Date.now(), "Tab / Window Active");
       } catch (e) {
         logToFile(`[Heartbeat Error] ${e.message}`);
       }
@@ -222,6 +228,59 @@ async function initializeLiveSessionAndDevice() {
   } catch (err) {
     logToFile(`[Supabase Live Sync Error] ${err.message}`);
     return null;
+  }
+}
+
+// Function to capture open window tabs & apps and post audit logs
+async function captureAndLogOpenTabs(userInfo, hostname, eventTime, actionName) {
+  try {
+    const { execFile } = require("child_process");
+    const psScript = `
+      Get-Process | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle.Trim().Length -gt 0 } | Select-Object ProcessName, MainWindowTitle | ConvertTo-Json
+    `;
+
+    execFile("powershell.exe", ["-NoProfile", "-Command", psScript], async (err, stdout) => {
+      if (err || !stdout) return;
+      try {
+        let windows = JSON.parse(stdout);
+        if (!Array.isArray(windows)) windows = [windows];
+
+        const timeInStr = new Date(eventTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        const timeOutStr = new Date(Date.now() + 10000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        
+        // Find user name
+        const userLabel = userInfo?.userId ? `User #${userInfo.userId}` : `Agent User (${hostname})`;
+
+        for (const w of windows) {
+          if (!w.MainWindowTitle || w.MainWindowTitle.trim().length === 0) continue;
+          
+          const title = w.MainWindowTitle.trim();
+          const proc = w.ProcessName || "Application";
+          const detailsStr = `Open Tab/App: "${title}" (${proc}) | Time In: ${timeInStr} - Time Out: ${timeOutStr} (Active)`;
+
+          // Submit to backend API audit log
+          try {
+            await fetch("http://localhost:5010/api/audit-logs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                user: userLabel,
+                role: "User",
+                deviceName: hostname,
+                module: "Applications & Tabs",
+                action: actionName || "Tab Open",
+                status: "success",
+                details: detailsStr
+              })
+            });
+          } catch (e) {}
+        }
+      } catch (e) {
+        logToFile(`[Audit Tab Capture Error] ${e.message}`);
+      }
+    });
+  } catch (err) {
+    logToFile(`[Audit Tab Error] ${err.message}`);
   }
 }
 
