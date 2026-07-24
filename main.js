@@ -2,6 +2,7 @@ const { app, BrowserWindow, desktopCapturer, ipcMain, powerMonitor } = require("
 const path = require("path");
 const fs = require("fs");
 const fsPromises = fs.promises;
+const os = require("os");
 
 let mainWindow;
 let writeStream;
@@ -9,6 +10,11 @@ let isRecording = false;
 let isClosing = false;
 let currentRecordingMetadata = null;
 let logFilePath = null;
+let currentActiveSessionId = null;
+let heartbeatInterval = null;
+
+const SUPABASE_URL = "https://gidvoxfkdpxxujipchdz.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpZHZveGZrZHB4eHVqaXBjaGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwOTIyNzUsImV4cCI6MjA5OTY2ODI3NX0.nbSHVEZbJaPSXHhMWhynZhKpB43VUp0VLYe1FauSQZo";
 
 function logToFile(message) {
   try {
@@ -34,6 +40,191 @@ function getTimestamp() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
 }
 
+async function supabaseFetch(url, options, label) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`${label} failed (HTTP ${res.status}): ${errText}`);
+      }
+      return res;
+    } catch (err) {
+      if (attempt < 2) {
+        logToFile(`[Supabase Sync] ${label} attempt ${attempt} failed, retrying in 2s: ${err.message}`);
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+// Function to initialize active live session & device immediately in Supabase on app launch / start recording
+async function initializeLiveSessionAndDevice() {
+  try {
+    const hostname = os.hostname();
+    const platform = os.platform();
+    let operatingSystem = "Windows";
+    if (platform === "darwin") operatingSystem = "macOS";
+    else if (platform === "linux") operatingSystem = "Linux";
+
+    logToFile(`[Supabase Live Sync] Initializing live device & session for hostname: ${hostname}...`);
+
+    // 1. Resolve Device
+    const deviceUrl = `${SUPABASE_URL}/rest/v1/devices?name=eq.${encodeURIComponent(hostname)}&select=id,user_id`;
+    const deviceFetchRes = await supabaseFetch(deviceUrl, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
+    }, "Device lookup");
+
+    let deviceId = null;
+    let userId = null;
+    const devices = await deviceFetchRes.json();
+
+    if (devices && devices.length > 0) {
+      deviceId = devices[0].id;
+      userId = devices[0].user_id;
+      logToFile(`[Supabase Live Sync] Found existing device id: ${deviceId} (User ID: ${userId})`);
+
+      // Update device online status
+      await supabaseFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${deviceId}`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ is_online: true, last_seen_at: new Date().toISOString() })
+      }, "Device update");
+    } else {
+      // Resolve user matching local OS username or recent invited user
+      const osUser = (os.userInfo() ? os.userInfo().username : hostname).toLowerCase();
+      logToFile(`[Supabase Live Sync] Device not found. Resolving user for OS user '${osUser}'...`);
+
+      const userSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&or=(email.ilike.*${encodeURIComponent(osUser)}*,name.ilike.*${encodeURIComponent(osUser)}*)&limit=1`;
+      const userSearchRes = await supabaseFetch(userSearchUrl, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
+      }, "User search");
+
+      const matchedUsers = await userSearchRes.json();
+      if (matchedUsers && matchedUsers.length > 0) {
+        userId = matchedUsers[0].id;
+        logToFile(`[Supabase Live Sync] Matched user '${matchedUsers[0].name}' (ID: ${userId})`);
+      } else {
+        // Check for recent invited user (role = 'user')
+        const invitedSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&role=eq.user&order=id.desc&limit=1`;
+        const invitedSearchRes = await supabaseFetch(invitedSearchUrl, {
+          method: "GET",
+          headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
+        }, "Invited user lookup");
+        const invitedUsers = await invitedSearchRes.json();
+
+        if (invitedUsers && invitedUsers.length > 0) {
+          userId = invitedUsers[0].id;
+          logToFile(`[Supabase Live Sync] Assigned to invited user '${invitedUsers[0].name}' (ID: ${userId})`);
+        } else {
+          // Create user profile for this OS user
+          const formattedName = osUser.replace(/[\._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          const createUserRes = await supabaseFetch(`${SUPABASE_URL}/rest/v1/users`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY,
+              "Content-Type": "application/json", "Prefer": "return=representation"
+            },
+            body: JSON.stringify({
+              name: formattedName,
+              email: `${osUser.replace(/[^a-z0-9]/g, '')}@cybaemtech.com`,
+              password_hash: "agent-created", role: "user", is_online: true
+            })
+          }, "User creation");
+          const newUsers = await createUserRes.json();
+          userId = newUsers[0].id;
+          logToFile(`[Supabase Live Sync] Created user '${formattedName}' (ID: ${userId})`);
+        }
+      }
+
+      // Create new device record
+      const createDeviceRes = await supabaseFetch(`${SUPABASE_URL}/rest/v1/devices`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY,
+          "Content-Type": "application/json", "Prefer": "return=representation"
+        },
+        body: JSON.stringify({
+          user_id: userId, name: hostname, operating_system: operatingSystem,
+          is_online: true, agent_version: "1.0.0", last_seen_at: new Date().toISOString()
+        })
+      }, "Device creation");
+      const newDevices = await createDeviceRes.json();
+      deviceId = newDevices[0].id;
+      logToFile(`[Supabase Live Sync] Created device '${hostname}' (ID: ${deviceId})`);
+    }
+
+    // Mark User as Online in DB
+    if (userId) {
+      await supabaseFetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ is_online: true, last_seen_at: new Date().toISOString() })
+      }, "User online status update");
+    }
+
+    // 2. Create Active Live Session Record Immediately
+    logToFile(`[Supabase Live Sync] Creating live active session record in database...`);
+    const createSessionRes = await supabaseFetch(`${SUPABASE_URL}/rest/v1/sessions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY,
+        "Content-Type": "application/json", "Prefer": "return=representation"
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        device_id: deviceId,
+        login_time: new Date().toISOString(),
+        duration_seconds: 0,
+        upload_status: "recording",
+        recording_status: "recording"
+      })
+    }, "Live session creation");
+
+    const createdSessions = await createSessionRes.json();
+    if (createdSessions && createdSessions.length > 0) {
+      currentActiveSessionId = createdSessions[0].id;
+      logToFile(`[Supabase Live Sync] 🟢 Live session active in DB! Session ID: ${currentActiveSessionId}`);
+    }
+
+    // 3. Start Heartbeat Timer (Updates duration & last_seen every 10s)
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    const startTime = Date.now();
+    heartbeatInterval = setInterval(async () => {
+      if (!isRecording || !currentActiveSessionId) return;
+      const currentDuration = Math.floor((Date.now() - startTime) / 1000);
+      try {
+        // Update Session duration
+        await supabaseFetch(`${SUPABASE_URL}/rest/v1/sessions?id=eq.${currentActiveSessionId}`, {
+          method: "PATCH",
+          headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ duration_seconds: currentDuration })
+        }, "Session heartbeat");
+
+        // Update Device last_seen_at
+        if (deviceId) {
+          await supabaseFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${deviceId}`, {
+            method: "PATCH",
+            headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ is_online: true, last_seen_at: new Date().toISOString() })
+          }, "Device heartbeat");
+        }
+      } catch (e) {
+        logToFile(`[Heartbeat Error] ${e.message}`);
+      }
+    }, 10000);
+
+    return { deviceId, userId };
+  } catch (err) {
+    logToFile(`[Supabase Live Sync Error] ${err.message}`);
+    return null;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -53,7 +244,7 @@ function createWindow() {
       e.preventDefault();
       if (!isClosing) {
         isClosing = true;
-        mainWindow.hide(); // Instantly hide the window so it feels closed
+        mainWindow.hide();
         mainWindow.webContents.send("stop-recording");
       }
     }
@@ -102,6 +293,9 @@ app.whenReady().then(() => {
 
     writeStream = fs.createWriteStream(filePath);
     isRecording = true;
+
+    // Immediately trigger live session and device creation in Supabase!
+    initializeLiveSessionAndDevice();
   });
 
   ipcMain.handle("save-chunk", (event, buffer) => {
@@ -111,6 +305,11 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("finalize-recording", async () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+
     if (writeStream && !writeStream.destroyed) {
       await new Promise((resolve) => {
         writeStream.on("finish", resolve);
@@ -121,48 +320,9 @@ app.whenReady().then(() => {
     isRecording = false;
 
     if (currentRecordingMetadata) {
-      let dataDir;
-      if (app.isPackaged) {
-        dataDir = path.join(app.getPath("userData"), "data");
-      } else {
-        dataDir = path.join(__dirname, "frontend", "data");
-      }
-      const jsonPath = path.join(dataDir, "recordings.json");
       const durationSeconds = Math.floor((Date.now() - currentRecordingMetadata.startTime) / 1000);
       
-      let recordings = [];
-      try {
-        const fileContent = await fsPromises.readFile(jsonPath, "utf-8");
-        recordings = JSON.parse(fileContent);
-      } catch (err) {
-        // file doesn't exist or is invalid JSON, start fresh
-      }
-      
-      const newId = recordings.length > 0 ? Math.max(...recordings.map(r => r.id || 0)) + 1 : 1;
-      
-      const newRecord = {
-        id: newId,
-        employeeId: "EMP001",
-        employeeName: "Demo User",
-        fileName: currentRecordingMetadata.fileName,
-        filePath: currentRecordingMetadata.filePath,
-        recordedAt: currentRecordingMetadata.recordedAt,
-        duration: durationSeconds,
-        status: "completed"
-      };
-      
-      recordings.push(newRecord);
-      
-      try {
-        if (app.isPackaged) {
-          await fsPromises.mkdir(dataDir, { recursive: true });
-        }
-        await fsPromises.writeFile(jsonPath, JSON.stringify(recordings, null, 2));
-      } catch (err) {
-        console.error("Failed to write recordings metadata", err);
-      }
-      
-      // Upload recording directly to Supabase cloud storage and database
+      // Upload recording directly to Supabase cloud storage and update session in DB
       try {
         let absoluteFilePath;
         if (app.isPackaged) {
@@ -172,35 +332,10 @@ app.whenReady().then(() => {
         }
         const fileBuffer = await fsPromises.readFile(absoluteFilePath);
         
-        logToFile(`[Supabase Sync] Uploading ${newRecord.fileName} (${fileBuffer.length} bytes)...`);
-        
-        const SUPABASE_URL = "https://gidvoxfkdpxxujipchdz.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpZHZveGZrZHB4eHVqaXBjaGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwOTIyNzUsImV4cCI6MjA5OTY2ODI3NX0.nbSHVEZbJaPSXHhMWhynZhKpB43VUp0VLYe1FauSQZo";
-        const os = require("os");
-
-        // Helper: make a Supabase REST call with retry
-        async function supabaseFetch(url, options, label) {
-          for (let attempt = 1; attempt <= 2; attempt++) {
-            try {
-              const res = await fetch(url, options);
-              if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`${label} failed (HTTP ${res.status}): ${errText}`);
-              }
-              return res;
-            } catch (err) {
-              if (attempt < 2) {
-                logToFile(`[Supabase Sync] ${label} attempt ${attempt} failed, retrying in 3s: ${err.message}`);
-                await new Promise(r => setTimeout(r, 3000));
-              } else {
-                throw err;
-              }
-            }
-          }
-        }
+        logToFile(`[Supabase Sync] Uploading ${currentRecordingMetadata.fileName} (${fileBuffer.length} bytes)...`);
 
         // 1. Upload video file to Supabase Storage
-        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/recordings/${newRecord.fileName}`;
+        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/recordings/${currentRecordingMetadata.fileName}`;
         await supabaseFetch(uploadUrl, {
           method: "POST",
           headers: {
@@ -211,150 +346,29 @@ app.whenReady().then(() => {
           body: fileBuffer
         }, "Storage upload");
 
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/recordings/${newRecord.fileName}`;
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/recordings/${currentRecordingMetadata.fileName}`;
         logToFile(`[Supabase Sync] Video uploaded successfully. URL: ${publicUrl}`);
 
-        // 2. Identify/Create Device based on local hostname & resolve User
-        const hostname = os.hostname();
-        const platform = os.platform();
-        let operatingSystem = "Windows";
-        if (platform === "darwin") operatingSystem = "macOS";
-        else if (platform === "linux") operatingSystem = "Linux";
-
-        logToFile(`[Supabase Sync] Resolving device for hostname: ${hostname}...`);
-
-        // Fetch device (including assigned user_id)
-        const deviceUrl = `${SUPABASE_URL}/rest/v1/devices?name=eq.${encodeURIComponent(hostname)}&select=id,user_id`;
-        const deviceFetchRes = await supabaseFetch(deviceUrl, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-            "apikey": SUPABASE_ANON_KEY,
-          }
-        }, "Device lookup");
-
-        let deviceId = null;
-        let userId = null;
-        const devices = await deviceFetchRes.json();
-
-        if (devices && devices.length > 0) {
-          deviceId = devices[0].id;
-          userId = devices[0].user_id;
-          logToFile(`[Supabase Sync] Found existing device id: ${deviceId} assigned to user_id: ${userId}`);
-        } else {
-          // Device doesn't exist yet: resolve matching user for this computer
-          const osUser = (os.userInfo() ? os.userInfo().username : hostname).toLowerCase();
-          logToFile(`[Supabase Sync] Device not found. Resolving user matching local OS user '${osUser}' or invited users...`);
-
-          // 1. Check if user exists matching local OS username or hostname
-          const userSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&or=(email.ilike.*${encodeURIComponent(osUser)}*,name.ilike.*${encodeURIComponent(osUser)}*)&limit=1`;
-          const userSearchRes = await supabaseFetch(userSearchUrl, {
-            method: "GET",
-            headers: {
-              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-              "apikey": SUPABASE_ANON_KEY,
-            }
-          }, "User search");
-
-          const matchedUsers = await userSearchRes.json();
-          if (matchedUsers && matchedUsers.length > 0) {
-            userId = matchedUsers[0].id;
-            logToFile(`[Supabase Sync] Matched user '${matchedUsers[0].name}' (${matchedUsers[0].email}) with id: ${userId}`);
-          } else {
-            // 2. Check for recent invited users (role = 'user')
-            const invitedSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&role=eq.user&order=id.desc&limit=1`;
-            const invitedSearchRes = await supabaseFetch(invitedSearchUrl, {
-              method: "GET",
-              headers: {
-                "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-                "apikey": SUPABASE_ANON_KEY,
-              }
-            }, "Invited user lookup");
-            const invitedUsers = await invitedSearchRes.json();
-
-            if (invitedUsers && invitedUsers.length > 0) {
-              userId = invitedUsers[0].id;
-              logToFile(`[Supabase Sync] Assigned to recent invited user '${invitedUsers[0].name}' (${invitedUsers[0].email}) with id: ${userId}`);
-            } else {
-              // 3. Create user profile for this OS user
-              const formattedName = osUser.replace(/[\._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-              logToFile(`[Supabase Sync] Creating user profile for '${formattedName}'...`);
-              const createUserUrl = `${SUPABASE_URL}/rest/v1/users`;
-              const createUserRes = await supabaseFetch(createUserUrl, {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-                  "apikey": SUPABASE_ANON_KEY,
-                  "Content-Type": "application/json",
-                  "Prefer": "return=representation"
-                },
-                body: JSON.stringify({
-                  name: formattedName,
-                  email: `${osUser.replace(/[^a-z0-9]/g, '')}@cybaemtech.com`,
-                  password_hash: "agent-created",
-                  role: "user",
-                  is_online: true
-                })
-              }, "User creation");
-              const newUsers = await createUserRes.json();
-              userId = newUsers[0].id;
-              logToFile(`[Supabase Sync] Created user '${formattedName}' with id: ${userId}`);
-            }
-          }
-
-          // Create new device under resolved user
-          logToFile(`[Supabase Sync] Creating new device record for hostname: ${hostname}...`);
-          const createDeviceUrl = `${SUPABASE_URL}/rest/v1/devices`;
-          const createDeviceRes = await supabaseFetch(createDeviceUrl, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-              "apikey": SUPABASE_ANON_KEY,
-              "Content-Type": "application/json",
-              "Prefer": "return=representation"
-            },
+        // 2. Update existing Session record or create if not exists
+        if (currentActiveSessionId) {
+          logToFile(`[Supabase Sync] Updating session ID ${currentActiveSessionId} to completed...`);
+          await supabaseFetch(`${SUPABASE_URL}/rest/v1/sessions?id=eq.${currentActiveSessionId}`, {
+            method: "PATCH",
+            headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
             body: JSON.stringify({
-              user_id: userId,
-              name: hostname,
-              operating_system: operatingSystem,
-              is_online: true,
-              agent_version: "1.0.0",
-              last_seen_at: new Date().toISOString()
+              logout_time: new Date().toISOString(),
+              duration_seconds: durationSeconds,
+              recording_size_bytes: fileBuffer.length,
+              recording_url: publicUrl,
+              upload_status: "completed",
+              recording_status: "completed"
             })
-          }, "Device creation");
-
-          const newDevices = await createDeviceRes.json();
-          deviceId = newDevices[0].id;
-          logToFile(`[Supabase Sync] Created device with id: ${deviceId}`);
+          }, "Session completion patch");
         }
 
-        // 4. Create Session record
-        logToFile(`[Supabase Sync] Creating session record in database...`);
-        const createSessionUrl = `${SUPABASE_URL}/rest/v1/sessions`;
-        await supabaseFetch(createSessionUrl, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-            "apikey": SUPABASE_ANON_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=representation"
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            device_id: deviceId,
-            login_time: new Date(newRecord.recordedAt).toISOString(),
-            logout_time: new Date(new Date(newRecord.recordedAt).getTime() + newRecord.duration * 1000).toISOString(),
-            duration_seconds: newRecord.duration,
-            recording_size_bytes: fileBuffer.length,
-            recording_url: publicUrl,
-            upload_status: "completed",
-            recording_status: "completed"
-          })
-        }, "Session creation");
-
-        logToFile("[Supabase Sync] ✅ Successfully uploaded recording and synced database!");
+        logToFile("[Supabase Sync] ✅ Successfully uploaded recording and updated session database!");
         
-        // Delete local recording file so it does not save on local computer!
+        // Delete local recording file so local disk space stays clean
         await fsPromises.unlink(absoluteFilePath);
         logToFile("Deleted local video file.");
       } catch (err) {
@@ -362,6 +376,7 @@ app.whenReady().then(() => {
       }
       
       currentRecordingMetadata = null;
+      currentActiveSessionId = null;
     }
 
     if (isClosing) {
