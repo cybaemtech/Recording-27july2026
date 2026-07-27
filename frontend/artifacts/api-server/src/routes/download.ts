@@ -4,40 +4,72 @@ import fs from "fs";
 
 const router: IRouter = Router();
 
-// Endpoint to download the agent installer
+function findInstallerFile(platform: string): { filePath: string; fileName: string } | null {
+  const normPlatform = platform.toLowerCase();
+  // Find project root folder dynamically or via fixed path
+  const projectRoot = path.resolve(process.cwd(), "..", "..", "..");
+
+  const possibleRoots = [
+    projectRoot,
+    "c:\\inetpub\\wwwroot\\Screen recording",
+    path.resolve(process.cwd(), "..", "..")
+  ];
+
+  if (normPlatform === "windows" || normPlatform === "win") {
+    for (const root of possibleRoots) {
+      const candidates = [
+        path.join(root, "dist", "EMS Recorder Setup 1.0.0.exe"),
+        path.join(root, "exe file", "EMS-Recorder-Windows", "EMS Recorder Setup 1.0.0.exe"),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          return { filePath: candidate, fileName: "EMS Recorder Setup 1.0.0.exe" };
+        }
+      }
+    }
+  } else if (normPlatform === "mac" || normPlatform === "macos" || normPlatform === "darwin") {
+    for (const root of possibleRoots) {
+      const candidates = [
+        path.join(root, "dist", "EMS Recorder-1.0.0-arm64.dmg"),
+        path.join(root, "dist", "EMS Recorder-1.0.0.dmg"),
+        path.join(root, "dist", "EMS Recorder-1.0.0-arm64.zip"),
+        path.join(root, "exe file", "EMS-Recorder-Mac", "EMS Recorder-1.0.0-arm64.dmg"),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          return { filePath: candidate, fileName: path.basename(candidate) };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+// Endpoint to download the agent installer for Windows or Mac
 router.get("/download/agent/:platform", (req, res) => {
   const { platform } = req.params;
-  
-  // Define mapping of platform to directory and filename
-  const platformMapping: Record<string, { dir: string, file: string }> = {
-    windows: { dir: "EMS-Recorder-Windows", file: "EMS Recorder Setup 1.0.0.exe" },
-    mac: { dir: "EMS-Recorder-Mac", file: "EMS Recorder-1.0.0-arm64.dmg" }
-  };
+  const result = findInstallerFile(platform);
 
-  const target = platformMapping[platform.toLowerCase()];
-  
-  if (!target) {
-    res.status(400).json({ error: "Invalid platform requested. Allowed values: 'windows', 'mac'." });
+  if (!result) {
+    console.error(`Installer file not found for platform: ${platform}`);
+    res.status(404).json({
+      error: `Installer file for ${platform} is not available on the server. Please build or upload the ${platform} package to the dist folder.`
+    });
     return;
   }
 
-  // The exe files are located at c:\inetpub\wwwroot\Screen recording\exe file
-  const exeFolderPath = path.join(process.cwd(), "..", "..", "..", "exe file", target.dir, target.file);
+  console.log(`Serving installer: ${result.filePath} for platform: ${platform}`);
 
-  if (!fs.existsSync(exeFolderPath)) {
-    console.error(`File not found at: ${exeFolderPath}`);
-    res.status(404).json({ error: "Installer file not found on the server." });
-    return;
-  }
-
-  res.download(exeFolderPath, target.file, (err) => {
+  res.download(result.filePath, result.fileName, (err) => {
     if (err) {
-      console.error("Error downloading file:", err);
+      console.error("Error sending installer file:", err);
       if (!res.headersSent) {
-        res.status(500).json({ error: "Error downloading file." });
+        res.status(500).json({ error: "Error transferring installer file." });
       }
     }
   });
 });
 
 export default router;
+

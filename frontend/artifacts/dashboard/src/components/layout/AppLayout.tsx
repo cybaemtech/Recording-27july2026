@@ -96,7 +96,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               Logout
             </button>
             <div className="px-2 pb-2 space-y-1">
-              <p className="text-[10px] text-slate-400">© 2025 MonitorPro</p>
+              <p className="text-[10px] text-slate-400">© 2026 MonitorPro</p>
               <p className="text-[10px] text-slate-400">All rights reserved.</p>
               <p className="text-[10px] text-slate-400 pt-1">
                 Design by <a href="https://www.cybaemtech.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600 font-medium transition-colors">Cybaemtech</a>

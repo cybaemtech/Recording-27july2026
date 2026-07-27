@@ -21,7 +21,8 @@ import {
   Shield, 
   ArrowUpRight,
   Filter,
-  Loader2
+  Loader2,
+  Download
 } from "lucide-react";
 
 
@@ -240,8 +241,129 @@ export default function AuditLogs() {
     setDateRange("all");
     setModuleFilter("all");
     setActionFilter("all");
-    setStatusFilter("all");
     setPage(1);
+  };
+
+  const handleDownloadTxtLog = () => {
+    const timestamp = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    });
+
+    const logsToExport = sortedLogs;
+
+    let content = `================================================================================\n`;
+    content += `CLOUD SESSION RECORDER - AUDIT LOGS COMPREHENSIVE REPORT\n`;
+    content += `Generated Date : ${timestamp}\n`;
+    content += `Total Entries  : ${logsToExport.length}\n`;
+    content += `Filter Status  : Search: "${search || 'None'}", Date: ${dateRange}, Module: ${moduleFilter}, Status: ${statusFilter}\n`;
+    content += `================================================================================\n\n`;
+
+    logsToExport.forEach((log, index) => {
+      let timeInStr = log.timestamp;
+      let timeOutStr = log.timestamp;
+      let timeUsedStr = "Active Session";
+
+      if (log.details.includes("Time In:") && log.details.includes("Time Out:")) {
+        const match = log.details.match(/Time In:\s*([^|-]+)\s*-\s*Time Out:\s*([^|)]+)/);
+        if (match) {
+          timeInStr = match[1].trim();
+          timeOutStr = match[2].trim();
+        }
+      }
+      if (log.details.includes("Time Used:") || log.details.includes("duration")) {
+        const matchDur = log.details.match(/Time Used:\s*([^|]+)/i);
+        if (matchDur) timeUsedStr = matchDur[1].trim();
+      }
+
+      content += `[${index + 1}] LOG ID          : ${log.id}\n`;
+      content += `    TIMESTAMP       : ${log.timestamp}\n`;
+      content += `    USER NAME       : ${log.userName}\n`;
+      content += `    USER EMAIL      : ${log.userEmail}\n`;
+      content += `    USER ROLE       : ${log.userRole}\n`;
+      content += `    DEVICE NAME     : ${log.deviceName}\n`;
+      content += `    MODULE          : ${log.module}\n`;
+      content += `    ACTION          : ${log.action}\n`;
+      content += `    STATUS          : ${log.status.toUpperCase()}\n`;
+      content += `    TIME IN (START) : ${timeInStr}\n`;
+      content += `    TIME OUT (END)  : ${timeOutStr}\n`;
+      content += `    TIME USED       : ${timeUsedStr}\n`;
+      content += `    DETAILS & APPS  : ${log.details}\n`;
+      if (log.metadata && Object.keys(log.metadata).length > 0) {
+        content += `    METADATA        : ${JSON.stringify(log.metadata)}\n`;
+      }
+      content += `--------------------------------------------------------------------------------\n\n`;
+    });
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const filename = `audit-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadSingleLog = (log: AuditLog) => {
+    let timeInStr = log.timestamp;
+    let timeOutStr = log.timestamp;
+    let timeUsedStr = "Active Session";
+    let appsUsedStr = "Screen Recording Session & Window Telemetry";
+
+    if (log.details.includes("Time In:") && log.details.includes("Time Out:")) {
+      const match = log.details.match(/Time In:\s*([^|-]+)\s*-\s*Time Out:\s*([^|)]+)/);
+      if (match) {
+        timeInStr = match[1].trim();
+        timeOutStr = match[2].trim();
+      }
+    }
+    if (log.details.includes("Time Used:") || log.details.includes("Duration:")) {
+      const matchDur = log.details.match(/(?:Time Used|Duration):\s*([^|]+)/i);
+      if (matchDur) timeUsedStr = matchDur[1].trim();
+    }
+    if (log.details.includes("Apps:") || log.details.includes("App/Tab")) {
+      appsUsedStr = log.details;
+    }
+
+    let content = `================================================================================\n`;
+    content += `CLOUD SESSION RECORDER - AUDIT LOG RECORD\n`;
+    content += `================================================================================\n\n`;
+    content += `LOG ID            : ${log.id}\n`;
+    content += `TIMESTAMP (DATE)  : ${log.timestamp}\n`;
+    content += `USER NAME         : ${log.userName}\n`;
+    content += `USER EMAIL        : ${log.userEmail}\n`;
+    content += `USER ROLE         : ${log.userRole}\n`;
+    content += `DEVICE NAME       : ${log.deviceName}\n`;
+    content += `MODULE            : ${log.module}\n`;
+    content += `ACTION            : ${log.action}\n`;
+    content += `STATUS            : ${log.status.toUpperCase()}\n`;
+    content += `TIME IN (START)   : ${timeInStr}\n`;
+    content += `TIME OUT (END)    : ${timeOutStr}\n`;
+    content += `TIME USED         : ${timeUsedStr}\n`;
+    content += `APPS & TABS USED  : ${appsUsedStr}\n`;
+    content += `FULL DETAILS      : ${log.details}\n`;
+    if (log.metadata && Object.keys(log.metadata).length > 0) {
+      content += `METADATA          : ${JSON.stringify(log.metadata, null, 2)}\n`;
+    }
+    content += `\n================================================================================\n`;
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `audit-log-${log.id.replace(/[^a-zA-Z0-9-]/g, "_")}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -255,6 +377,14 @@ export default function AuditLogs() {
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <Button
+            onClick={handleDownloadTxtLog}
+            variant="outline"
+            className="text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 shadow-sm flex items-center gap-2"
+          >
+            <Download className="w-4 h-4 text-indigo-600" />
+            Download TXT Log
+          </Button>
           <div className="text-xs font-semibold text-slate-600 bg-slate-100 px-3.5 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2">
             <ClipboardList className="w-4 h-4 text-indigo-600" />
             {total} Log Entries
@@ -605,14 +735,25 @@ export default function AuditLogs() {
 
                     {/* Actions */}
                     <TableCell className="text-right pr-6 whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-3 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-medium text-xs rounded-lg gap-1.5"
-                        onClick={() => setSelectedLog(log)}
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View Details
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 font-medium text-xs rounded-lg gap-1.5"
+                          onClick={() => handleDownloadSingleLog(log)}
+                          title="Export TXT log for this entry"
+                        >
+                          <Download className="w-3.5 h-3.5 text-indigo-600" /> Export TXT
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-medium text-xs rounded-lg gap-1.5"
+                          onClick={() => setSelectedLog(log)}
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Details
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

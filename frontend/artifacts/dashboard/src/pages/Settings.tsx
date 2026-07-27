@@ -75,7 +75,6 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "configuration",  label: "Configuration",        icon: SettingsIcon },
   { id: "api-console",    label: "API Console",          icon: Terminal },
   { id: "documentation",  label: "Documentation",        icon: BookOpen },
-  { id: "db-connections", label: "Database Connections", icon: Database },
 ];
 
 // ─── Configuration panel ─────────────────────────────────────────────────────
@@ -1254,7 +1253,7 @@ export default function Settings() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Settings</h2>
         <p className="text-slate-500 text-sm mt-1">
-          System configuration, API console, documentation, and database connections.
+          System configuration, API console, and documentation.
         </p>
       </div>
 

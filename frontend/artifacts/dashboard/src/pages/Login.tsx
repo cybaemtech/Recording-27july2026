@@ -75,7 +75,7 @@ export default function Login() {
             v2.4.1-stable • ENCRYPTED_CONNECTION
           </div>
           <div className="text-xs text-indigo-300 font-medium">
-            © 2025 Cybaemtech
+            © 2026 Cybaemtech
           </div>
         </div>
       </div>
