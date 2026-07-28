@@ -42,13 +42,11 @@ export default function Users() {
   const { mutate: inviteUser, isPending: isInviting } = useInviteUser({
     mutation: {
       onSuccess: (data: any) => {
+        toast({ title: "Success", description: "The invitation has been sent successfully." });
         if (data?.downloadUrl) {
-          // Construct the proper public URL based on where the frontend is loaded
           const publicUrl = window.location.origin + `/api/download/agent/${invitePlatform}`;
           setInviteLink(publicUrl);
-          toast({ title: "Link generated", description: "You can copy the link directly." });
         } else {
-          toast({ title: "Invitation sent", description: "The user has been invited successfully." });
           setIsInviteOpen(false);
           setInviteEmail("");
         }

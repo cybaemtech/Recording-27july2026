@@ -196,7 +196,7 @@ router.post("/users/invite", async (req, res): Promise<void> => {
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       const transporter = await getTransporter();
       const info = await transporter.sendMail({
-        from: '"Cloud Session Recorder" <noreply@cybaemtech.com>',
+        from: `"Cloud Session Recorder" <${process.env.SMTP_USER}>`,
         to: email,
         subject: "Invitation to Cloud Session Recorder Agent",
         text: `You have been invited to install the Cloud Session Recorder agent. Download the installer for ${platform} here: ${downloadUrl}`,

@@ -73,7 +73,7 @@ router.post("/closed", async (req, res) => {
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       const transporter = await getTransporter();
       await transporter.sendMail({
-        from: '"Cloud Session Recorder" <noreply@cybaemtech.com>',
+        from: `"Cloud Session Recorder" <${process.env.SMTP_USER}>`,
         to: email,
         subject: `Agent Closed: ${empName}`,
         html: htmlContent,
