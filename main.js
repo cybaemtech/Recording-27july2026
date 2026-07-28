@@ -205,7 +205,10 @@ async function initializeLiveSessionAndDevice() {
         await supabaseFetch(`${SUPABASE_URL}/rest/v1/sessions?id=eq.${currentActiveSessionId}`, {
           method: "PATCH",
           headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ duration_seconds: currentDuration })
+          body: JSON.stringify({ 
+            duration_seconds: currentDuration,
+            updated_at: new Date().toISOString()
+          })
         }, "Session heartbeat");
 
         // Update Device last_seen_at
@@ -299,20 +302,29 @@ async function captureAndLogOpenTabs(userInfo, hostname, eventTime, actionName) 
 
           // Submit to backend API audit log
           try {
-            await fetch("http://localhost:5010/api/audit-logs", {
+            await supabaseFetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                "apikey": SUPABASE_ANON_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+              },
               body: JSON.stringify({
                 user: userLabel,
+                user_id: userInfo?.userId || null,
                 role: "User",
-                deviceName: hostname,
+                device_name: hostname,
                 module: "Website & Tab Activity",
                 action: "Website / Tab Usage",
                 status: "success",
-                details: detailsStr
+                details: detailsStr,
+                timestamp: new Date(currentNow).toISOString()
               })
-            });
-          } catch (e) {}
+            }, "Audit Log");
+          } catch (e) {
+            logToFile(`[Audit Log Upload Error] ${e.message}`);
+          }
         }
       } catch (e) {
         logToFile(`[Audit Tab Capture Error] ${e.message}`);
@@ -473,8 +485,22 @@ app.whenReady().then(() => {
         logToFile(`[Supabase Sync] ❌ Sync failed: ${err.message}`);
       }
       
+      const sessionToNotify = currentActiveSessionId;
       currentRecordingMetadata = null;
       currentActiveSessionId = null;
+
+      if (sessionToNotify) {
+        try {
+          await fetch("http://localhost:3000/api/notify/closed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: sessionToNotify, type: "normal" })
+          });
+          logToFile("Sent normal close notification.");
+        } catch (e) {
+          logToFile("Failed to send close notification: " + e.message);
+        }
+      }
     }
 
     if (isClosing) {

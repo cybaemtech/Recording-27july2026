@@ -703,10 +703,29 @@ export default function AuditLogs() {
                     </TableCell>
 
                     {/* Details */}
-                    <TableCell className="max-w-[280px]">
-                      <p className="text-xs text-slate-600 truncate" title={log.details}>
-                        {log.details}
-                      </p>
+                    <TableCell className="max-w-[320px]">
+                      {log.action === "Website / Tab Usage" && log.details.includes("Time In:") ? (
+                        <div className="flex flex-col gap-1 text-xs">
+                          <div className="font-semibold text-slate-800 truncate" title={log.details.split("|")[0].replace("Website/Tab: ", "").trim()}>
+                            {log.details.split("|")[0].replace("Website/Tab: ", "").replace(/"/g, "").trim()}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {log.details.match(/Time In:\s*([^|-]+)/)?.[1]?.trim() || "-"} 
+                              <span className="text-slate-400 mx-0.5">→</span> 
+                              {log.details.match(/Time Out:\s*([^|)]+)/)?.[1]?.trim() || "-"}
+                            </span>
+                            <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">
+                              {log.details.match(/Time Used:\s*([^|]+)/i)?.[1]?.trim() || "-"}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-600 truncate" title={log.details}>
+                          {log.details}
+                        </p>
+                      )}
                     </TableCell>
 
                     {/* Device Name */}

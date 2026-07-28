@@ -24,8 +24,22 @@ router.get("/devices", async (req, res): Promise<void> => {
 
   const [devices, totalResult] = await Promise.all([
     db
-      .select()
+      .select({
+        id: devicesTable.id,
+        userId: devicesTable.userId,
+        name: devicesTable.name,
+        operatingSystem: devicesTable.operatingSystem,
+        isOnline: devicesTable.isOnline,
+        agentVersion: devicesTable.agentVersion,
+        lastSeenAt: devicesTable.lastSeenAt,
+        createdAt: devicesTable.createdAt,
+        updatedAt: devicesTable.updatedAt,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
+        userAvatarUrl: usersTable.avatarUrl,
+      })
       .from(devicesTable)
+      .leftJoin(usersTable, eq(devicesTable.userId, usersTable.id))
       .where(whereClause)
       .orderBy(devicesTable.name)
       .limit(limit)
@@ -47,6 +61,12 @@ router.get("/devices", async (req, res): Promise<void> => {
       lastSeenAt: d.lastSeenAt ?? null,
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
+      user: {
+        id: d.userId,
+        name: d.userName ?? "Unknown",
+        email: d.userEmail ?? "",
+        avatarUrl: d.userAvatarUrl ?? null,
+      },
     })),
     total: totalResult[0]?.count ?? 0,
     page,

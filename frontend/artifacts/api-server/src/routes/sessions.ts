@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, or, ilike } from "drizzle-orm";
-import { db, sessionsTable, usersTable, devicesTable } from "@workspace/db";
+import { db, sessionsTable, usersTable, devicesTable, auditLogsTable } from "@workspace/db";
 import {
   ListSessionsQueryParams,
   GetSessionParams,
@@ -365,6 +365,106 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   });
 });
 
+router.get("/sessions/:id/apps", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const [session] = await db
+      .select({
+        userId: sessionsTable.userId,
+        loginTime: sessionsTable.loginTime,
+        logoutTime: sessionsTable.logoutTime,
+      })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.id, params.data.id))
+      .limit(1);
+
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // Default to "now" if session is still active
+    const endTime = session.logoutTime || new Date();
+
+    const logs = await db
+      .select({ details: auditLogsTable.details })
+      .from(auditLogsTable)
+      .where(
+        and(
+          eq(auditLogsTable.userId, session.userId),
+          eq(auditLogsTable.action, "Website / Tab Usage"),
+          sql`${auditLogsTable.timestamp} >= ${session.loginTime}`,
+          sql`${auditLogsTable.timestamp} <= ${endTime}`
+        )
+      );
+
+    const appMap: Record<string, { duration: number, category: string }> = {};
+
+    logs.forEach(log => {
+      if (!log.details) return;
+      const details = log.details;
+      // Parse details: Website/Tab: "App Name" (Window Title) | Time In: ... | Time Used: 1m 5s
+      const nameMatch = details.match(/Website\/Tab:\s*(?:"([^"]+)"|([^\s|]+))/);
+      const timeMatch = details.match(/(?:Time Used|Duration):\s*([^|]+)/i);
+      
+      let appName = "Unknown App";
+      if (nameMatch) {
+        appName = (nameMatch[1] || nameMatch[2] || "").trim();
+      }
+      
+      let durationSeconds = 0;
+      if (timeMatch) {
+        const timeStr = timeMatch[1].trim();
+        const hMatch = timeStr.match(/(\d+)h/);
+        const mMatch = timeStr.match(/(\d+)m/);
+        const sMatch = timeStr.match(/(\d+)s/);
+        
+        if (hMatch) durationSeconds += parseInt(hMatch[1]) * 3600;
+        if (mMatch) durationSeconds += parseInt(mMatch[1]) * 60;
+        if (sMatch) durationSeconds += parseInt(sMatch[1]);
+        if (!hMatch && !mMatch && !sMatch) {
+          // just seconds if it's a plain number
+          durationSeconds += parseInt(timeStr) || 0;
+        }
+      }
+
+      if (!appMap[appName]) {
+        // Categorization heuristic
+        const lowerName = appName.toLowerCase();
+        let category = "neutral";
+        
+        const productiveKeywords = ["code", "github", "docs", "teams", "word", "excel", "supabase", "terminal", "powershell", "dev"];
+        const unproductiveKeywords = ["youtube", "facebook", "twitter", "instagram", "reddit", "netflix", "whatsapp", "telegram", "game"];
+        
+        if (productiveKeywords.some(kw => lowerName.includes(kw))) {
+          category = "productive";
+        } else if (unproductiveKeywords.some(kw => lowerName.includes(kw))) {
+          category = "unproductive";
+        }
+
+        appMap[appName] = { duration: 0, category };
+      }
+
+      appMap[appName].duration += durationSeconds;
+    });
+
+    const result = Object.entries(appMap).map(([name, data]) => ({
+      name,
+      duration: data.duration,
+      category: data.category
+    })).sort((a, b) => b.duration - a.duration);
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("Error fetching session apps:", err);
+    res.status(500).json({ error: "Failed to fetch session apps" });
+  }
+});
 router.delete("/sessions/:id", async (req, res): Promise<void> => {
   if (!process.env.DATABASE_URL) {
     const localRecs = getLocalRecordings();

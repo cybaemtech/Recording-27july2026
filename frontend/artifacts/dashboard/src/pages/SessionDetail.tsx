@@ -1,11 +1,12 @@
 import { useRef } from "react";
 import { Link, useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useGetSession } from "@workspace/api-client-react";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, PlayCircle, Download, Clock, HardDrive,
   MonitorSmartphone, User, Shield, AlertTriangle, CheckCircle2,
-  Upload, XCircle, Radio, FileVideo, Calendar
+  Upload, XCircle, Radio, FileVideo, Calendar, LayoutGrid
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,15 @@ export default function SessionDetail() {
     query: { enabled: !!id && !isNaN(id) }
   } as any);
 
+  const { data: appsData, isLoading: appsLoading } = useQuery({
+    queryKey: ["session-apps", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/sessions/${id}/apps`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!id && !isNaN(id)
+  });
   const skip = (seconds: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime += seconds;
@@ -273,6 +283,73 @@ export default function SessionDetail() {
             </CardContent>
           </Card>
 
+          {/* Application Usage (DeskTime Style) */}
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-white">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-800">
+                <LayoutGrid className="w-4 h-4 text-indigo-500" />
+                Application Usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 bg-slate-50/50">
+              {appsLoading ? (
+                <div className="p-8 text-center text-xs text-slate-500 font-medium">Loading app usage data...</div>
+              ) : !appsData || appsData.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500 font-medium">No application telemetry collected for this session.</div>
+              ) : (
+                <div className="flex flex-col p-4 gap-4">
+                  {["productive", "unproductive", "neutral"].map((category) => {
+                    const categoryApps = appsData.filter((a: any) => a.category === category);
+                    if (categoryApps.length === 0) return null;
+                    
+                    const totalSecs = categoryApps.reduce((acc: number, cur: any) => acc + cur.duration, 0);
+                    
+                    const colors: any = {
+                      productive: "bg-[#5eb629] text-white",
+                      unproductive: "bg-[#ff6b3b] text-white",
+                      neutral: "bg-[#8b9ba7] text-white"
+                    };
+
+                    const bgColors: any = {
+                      productive: "bg-white",
+                      unproductive: "bg-white",
+                      neutral: "bg-white"
+                    };
+
+                    const titles: any = {
+                      productive: "Productive apps",
+                      unproductive: "Unproductive apps",
+                      neutral: "Neutral apps"
+                    };
+
+                    return (
+                      <div key={category} className="rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                        <div className={`px-4 py-2 font-bold text-sm flex justify-between items-center ${colors[category]}`}>
+                          <span>{titles[category]}</span>
+                          <span>{formatDuration(totalSecs)}</span>
+                        </div>
+                        <div className={`grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 p-4 ${bgColors[category]}`}>
+                          {categoryApps.map((app: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-center text-xs border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                              <div className="flex items-center gap-2 truncate pr-4">
+                                <div className="w-4 h-4 shrink-0 rounded bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500 border border-slate-200 uppercase">
+                                  {app.name.charAt(0)}
+                                </div>
+                                <span className="font-medium text-slate-700 truncate" title={app.name}>{app.name}</span>
+                              </div>
+                              <span className="font-mono text-slate-500 shrink-0">
+                                {app.duration < 60 ? `${app.duration}s` : app.duration < 3600 ? `${Math.floor(app.duration/60)}m` : `${Math.floor(app.duration/3600)}h ${Math.floor((app.duration%3600)/60)}m`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
           {/* Session Metadata */}
           <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
             <CardHeader className="pb-3 border-b border-slate-100 bg-white">

@@ -22,6 +22,7 @@ import settingsRouter from "./settings.js";
 import auditLogsRouter from "./audit-logs.js";
 import dbConnectionsRouter from "./db-connections.js";
 import downloadRouter from "./download.js";
+import notifyRouter from "./notify.js";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,7 @@ router.use(settingsRouter);
 router.use(auditLogsRouter);
 router.use(dbConnectionsRouter);
 router.use(downloadRouter);
+router.use("/notify", notifyRouter);
 
 export default router;
 

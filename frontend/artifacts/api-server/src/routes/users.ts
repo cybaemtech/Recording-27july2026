@@ -42,6 +42,16 @@ async function getTransporter(): Promise<Transporter> {
   return cachedTransporter;
 }
 
+router.get("/fix-data", async (req, res): Promise<void> => {
+  try {
+    await db.update(devicesTable).set({ userId: 10 }).where(eq(devicesTable.userId, 8));
+    await db.update(sessionsTable).set({ userId: 10 }).where(eq(sessionsTable.userId, 8));
+    await db.delete(usersTable).where(eq(usersTable.id, 8));
+    res.json({ message: "Data successfully migrated from user 8 to user 10!" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router.get("/users", async (req, res): Promise<void> => {
   const parsed = ListUsersQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -185,7 +195,7 @@ router.post("/users/invite", async (req, res): Promise<void> => {
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       const transporter = await getTransporter();
       const info = await transporter.sendMail({
-        from: '"Cloud Session Recorder" <noreply@cybaemtech.com>',
+        from: process.env.SMTP_USER ? `"Cloud Session Recorder" <${process.env.SMTP_USER}>` : '"Cloud Session Recorder" <noreply@cybaemtech.com>',
         to: email,
         subject: "Invitation to Cloud Session Recorder Agent",
         text: `You have been invited to install the Cloud Session Recorder agent. Download the installer for ${platform} here: ${downloadUrl}`,

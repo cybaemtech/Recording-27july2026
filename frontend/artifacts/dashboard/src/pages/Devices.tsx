@@ -137,6 +137,9 @@ export default function Devices() {
                 <TableHead className="text-xs font-semibold text-slate-500 py-3.5 pl-6 cursor-pointer select-none group" onClick={() => handleSort("name")}>
                   <span className="flex items-center group-hover:text-slate-700 transition-colors">Hostname <SortIcon active={sortField === "name"} dir={sortDir} /></span>
                 </TableHead>
+                <TableHead className="text-xs font-semibold text-slate-500 py-3.5">
+                  <span className="flex items-center group-hover:text-slate-700 transition-colors">Assigned User</span>
+                </TableHead>
                 <TableHead className="text-xs font-semibold text-slate-500 py-3.5 cursor-pointer select-none group" onClick={() => handleSort("operatingSystem")}>
                   <span className="flex items-center group-hover:text-slate-700 transition-colors">OS <SortIcon active={sortField === "operatingSystem"} dir={sortDir} /></span>
                 </TableHead>
@@ -154,13 +157,13 @@ export default function Devices() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-48 text-center text-slate-400 text-sm font-medium">
+                  <TableCell colSpan={6} className="h-48 text-center text-slate-400 text-sm font-medium">
                     Scanning endpoints...
                   </TableCell>
                 </TableRow>
               ) : devices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-48 text-center text-slate-500 text-sm">
+                  <TableCell colSpan={6} className="h-48 text-center text-slate-500 text-sm">
                     No devices found matching your criteria.
                   </TableCell>
                 </TableRow>
@@ -174,6 +177,20 @@ export default function Devices() {
                           {getOsIcon(device.operatingSystem)}
                         </div>
                         <div className="font-mono text-[13px] font-bold text-slate-800">{device.name}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {device.user?.name ? (
+                          <>
+                            <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-[10px]">
+                              {device.user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-sm font-semibold text-slate-700">{device.user.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-slate-400 italic">Unassigned</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-semibold text-slate-600">{device.operatingSystem}</TableCell>
