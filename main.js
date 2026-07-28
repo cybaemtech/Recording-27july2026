@@ -205,7 +205,10 @@ async function initializeLiveSessionAndDevice() {
         await supabaseFetch(`${SUPABASE_URL}/rest/v1/sessions?id=eq.${currentActiveSessionId}`, {
           method: "PATCH",
           headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ duration_seconds: currentDuration })
+          body: JSON.stringify({ 
+            duration_seconds: currentDuration,
+            updated_at: new Date().toISOString()
+          })
         }, "Session heartbeat");
 
         // Update Device last_seen_at
@@ -482,8 +485,22 @@ app.whenReady().then(() => {
         logToFile(`[Supabase Sync] ❌ Sync failed: ${err.message}`);
       }
       
+      const sessionToNotify = currentActiveSessionId;
       currentRecordingMetadata = null;
       currentActiveSessionId = null;
+
+      if (sessionToNotify) {
+        try {
+          await fetch("http://localhost:3000/api/notify/closed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: sessionToNotify, type: "normal" })
+          });
+          logToFile("Sent normal close notification.");
+        } catch (e) {
+          logToFile("Failed to send close notification: " + e.message);
+        }
+      }
     }
 
     if (isClosing) {
