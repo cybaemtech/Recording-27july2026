@@ -1,0 +1,183 @@
+Excellent.
+
+Now convert this prototype into a fully functional application.
+
+Do NOT redesign the UI.
+
+Keep every screen exactly as it is.
+
+Instead complete the backend and make every feature functional.
+
+==============================
+
+DATABASE
+
+Create PostgreSQL schema.
+
+Tables
+
+Users
+
+Devices
+
+Sessions
+
+Recordings
+
+AuditLogs
+
+Settings
+
+==============================
+
+Implement real APIs.
+
+GET /dashboard
+
+GET /sessions
+
+GET /sessions/:id
+
+GET /users
+
+GET /users/:id
+
+GET /devices
+
+GET /devices/:id
+
+GET /reports
+
+GET /storage
+
+PUT /settings
+
+POST /login
+
+==============================
+
+Every row shown inside tables should open its Detail Page.
+
+Currently clicking rows shows:
+
+Session not found
+
+User not found
+
+Device not found
+
+Fix this completely.
+
+==============================
+
+Session Detail page should display
+
+Session ID
+
+Username
+
+Email
+
+Hostname
+
+Operating System
+
+Login Time
+
+Logout Time
+
+Duration
+
+Recording Size
+
+Cloud URL
+
+Recording Status
+
+Upload Status
+
+Recording Timeline
+
+Video Preview Placeholder
+
+Activity Timeline
+
+==============================
+
+User Detail Page
+
+Profile
+
+Assigned Devices
+
+Total Sessions
+
+Total Storage Used
+
+Last Login
+
+Department
+
+Role
+
+Statistics
+
+==============================
+
+Device Detail Page
+
+Hostname
+
+Operating System
+
+Current Status
+
+Installed Agent Version
+
+Storage Used
+
+Recording Statistics
+
+Assigned User
+
+Last Seen
+
+==============================
+
+Dashboard cards should use real API data instead of hardcoded values.
+
+Charts should use generated database data.
+
+==============================
+
+Search
+
+Filter
+
+Sorting
+
+Pagination
+
+must work everywhere.
+
+==============================
+
+Use PostgreSQL with seed data.
+
+Generate
+
+50 Users
+
+100 Devices
+
+500 Sessions
+
+so the dashboard feels like a real enterprise product.
+
+==============================
+
+Everything should now function as if this product is ready to integrate with the Desktop Agent.
+
+Do not implement screen recording yet.
+
+Focus only on making every page fully functional using database data.

@@ -1,0 +1,142 @@
+IMPORTANT: Do NOT redesign, recreate, or refactor the project. Preserve the existing architecture, routes, APIs, database models, authentication, navigation, and UI design. Reuse existing components wherever possible. Extend the current application only while minimizing token usage.
+
+The goal is to make the Cloud Session Recorder prototype look like a polished enterprise product that is fully prepared for future desktop agent integration.
+
+=========================
+1. ACTIVITY TIMELINE
+=========================
+
+Implement a professional Activity Timeline on the Session Details page.
+
+Display realistic chronological events such as:
+
+• User Login
+• Session Started
+• Recording Started
+• Active Application Changed
+• Browser Opened
+• User Became Idle
+• User Returned
+• Recording Paused
+• Recording Resumed
+• Session Ended
+• Logout
+
+Each event should include:
+
+- timestamp
+- icon
+- event title
+- short description
+- status badge
+- proper color coding
+
+Add search and event-type filters.
+
+Populate with realistic mock enterprise data.
+
+Design the timeline so future desktop agent APIs can directly replace the mock data without changing the frontend.
+
+=========================
+2. APPLICATION USAGE
+=========================
+
+Add a new "Application Usage" section inside Session Details.
+
+Display:
+
+- Application Name
+- Executable Name
+- Window Title
+- First Opened
+- Last Active
+- Total Usage Time
+- Percentage of Session
+
+Include:
+
+- progress bars
+- sortable table
+- search
+- filters
+- responsive design
+
+Populate with realistic demo data.
+
+Ensure the component is ready for future desktop agent API integration.
+
+=========================
+3. UI POLISH
+=========================
+
+Perform a complete UI consistency audit across the entire application WITHOUT redesigning it.
+
+Fix every inconsistency including:
+
+- dark theme color mismatches
+- inconsistent card backgrounds
+- spacing
+- padding
+- typography
+- icon alignment
+- badge styling
+- table spacing
+- hover effects
+- border consistency
+- shadows
+- responsive layouts
+- loading states
+- empty states
+- error states
+- text visibility
+- button consistency
+- scrollbar styling
+
+Keep the current design language exactly the same while making the UI feel production-ready.
+
+=========================
+4. DEMO DATA
+=========================
+
+Replace obvious placeholder content with realistic enterprise demo data.
+
+Populate:
+
+- Users
+- Devices
+- Sessions
+- Departments
+- Activity Timeline
+- Application Usage
+
+Make every page appear complete and professional.
+
+=========================
+5. PERFORMANCE
+=========================
+
+Reuse existing components.
+
+Avoid duplicate code.
+
+Do not regenerate existing pages unless necessary.
+
+Keep token consumption as low as possible.
+
+=========================
+6. DO NOT MODIFY
+=========================
+
+Do NOT redesign the dashboard.
+
+Do NOT change authentication.
+
+Do NOT replace APIs.
+
+Do NOT rebuild existing pages.
+
+Do NOT change navigation.
+
+Do NOT modify the backend architecture.
+
+Only extend and polish the existing application while keeping it fully compatible with future PostgreSQL migration, cloud storage integration, and the desktop recording agent.
