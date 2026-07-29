@@ -12,6 +12,7 @@ let currentRecordingMetadata = null;
 let logFilePath = null;
 let currentActiveSessionId = null;
 let heartbeatInterval = null;
+let registeredEmail = null;
 
 const SUPABASE_URL = "https://gidvoxfkdpxxujipchdz.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpZHZveGZrZHB4eHVqaXBjaGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwOTIyNzUsImV4cCI6MjA5OTY2ODI3NX0.nbSHVEZbJaPSXHhMWhynZhKpB43VUp0VLYe1FauSQZo";
@@ -94,11 +95,15 @@ async function initializeLiveSessionAndDevice() {
         body: JSON.stringify({ is_online: true, last_seen_at: new Date().toISOString() })
       }, "Device update");
     } else {
-      // Resolve user matching local OS username or recent invited user
-      const osUser = (os.userInfo() ? os.userInfo().username : hostname).toLowerCase();
-      logToFile(`[Supabase Live Sync] Device not found. Resolving user for OS user '${osUser}'...`);
+      // Use the registered email from user_config.json
+      if (!registeredEmail) {
+        logToFile("[Supabase Live Sync] Error: registeredEmail is not set.");
+        return;
+      }
+      
+      logToFile(`[Supabase Live Sync] Device not found. Resolving user for registered email '${registeredEmail}'...`);
 
-      const userSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&or=(email.ilike.*${encodeURIComponent(osUser)}*,name.ilike.*${encodeURIComponent(osUser)}*)&limit=1`;
+      const userSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&email=eq.${encodeURIComponent(registeredEmail)}&limit=1`;
       const userSearchRes = await supabaseFetch(userSearchUrl, {
         method: "GET",
         headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
@@ -109,36 +114,8 @@ async function initializeLiveSessionAndDevice() {
         userId = matchedUsers[0].id;
         logToFile(`[Supabase Live Sync] Matched user '${matchedUsers[0].name}' (ID: ${userId})`);
       } else {
-        // Check for recent invited user (role = 'user')
-        const invitedSearchUrl = `${SUPABASE_URL}/rest/v1/users?select=id,name,email&role=eq.user&order=id.desc&limit=1`;
-        const invitedSearchRes = await supabaseFetch(invitedSearchUrl, {
-          method: "GET",
-          headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
-        }, "Invited user lookup");
-        const invitedUsers = await invitedSearchRes.json();
-
-        if (invitedUsers && invitedUsers.length > 0) {
-          userId = invitedUsers[0].id;
-          logToFile(`[Supabase Live Sync] Assigned to invited user '${invitedUsers[0].name}' (ID: ${userId})`);
-        } else {
-          // Create user profile for this OS user
-          const formattedName = osUser.replace(/[\._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          const createUserRes = await supabaseFetch(`${SUPABASE_URL}/rest/v1/users`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY,
-              "Content-Type": "application/json", "Prefer": "return=representation"
-            },
-            body: JSON.stringify({
-              name: formattedName,
-              email: `${osUser.replace(/[^a-z0-9]/g, '')}@cybaemtech.com`,
-              password_hash: "agent-created", role: "user", is_online: true
-            })
-          }, "User creation");
-          const newUsers = await createUserRes.json();
-          userId = newUsers[0].id;
-          logToFile(`[Supabase Live Sync] Created user '${formattedName}' (ID: ${userId})`);
-        }
+        logToFile(`[Supabase Live Sync] ERROR: Registered email '${registeredEmail}' not found in database! User must be invited first.`);
+        return; // Halt if the user doesn't exist
       }
 
       // Create new device record
@@ -403,10 +380,41 @@ app.whenReady().then(() => {
 
     writeStream = fs.createWriteStream(filePath);
     isRecording = true;
-
-    // Immediately trigger live session and device creation in Supabase!
-    initializeLiveSessionAndDevice();
   });
+
+  ipcMain.handle("check-registration", async () => {
+    return registeredEmail;
+  });
+
+  ipcMain.handle("register-email", async (event, email) => {
+    try {
+      registeredEmail = email.trim();
+      const configPath = path.join(app.getPath("userData"), "user_config.json");
+      await fsPromises.writeFile(configPath, JSON.stringify({ email: registeredEmail }));
+      // Immediately trigger live session and device creation now that we have an email
+      await initializeLiveSessionAndDevice();
+      return { success: true };
+    } catch (err) {
+      logToFile(`[Registration Error] ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Load registered email on startup
+  const configPath = path.join(app.getPath("userData"), "user_config.json");
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      registeredEmail = config.email || null;
+    } catch (e) {
+      console.error("Failed to read user_config.json", e);
+    }
+  }
+
+  // If already registered, start syncing immediately
+  if (registeredEmail) {
+    initializeLiveSessionAndDevice();
+  }
 
   ipcMain.handle("save-chunk", (event, buffer) => {
     if (writeStream && !writeStream.destroyed) {

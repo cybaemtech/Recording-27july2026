@@ -56,4 +56,47 @@ window.electronAPI.onResumeRecording(() => {
   }
 });
 
-startAutoRecording();
+async function init() {
+  const registeredEmail = await window.electronAPI.checkRegistration();
+  
+  const registerScreen = document.getElementById("register-screen");
+  const recordingScreen = document.getElementById("recording-screen");
+  
+  if (registeredEmail) {
+    // Already registered, show recording screen and start
+    recordingScreen.classList.remove("hidden");
+    startAutoRecording();
+  } else {
+    // Not registered, show registration form
+    registerScreen.classList.remove("hidden");
+    
+    const form = document.getElementById("register-form");
+    const emailInput = document.getElementById("email-input");
+    const errorMsg = document.getElementById("error-message");
+    const submitBtn = document.getElementById("submit-btn");
+    
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = emailInput.value;
+      if (!email) return;
+      
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Registering...";
+      errorMsg.innerText = "";
+      
+      const result = await window.electronAPI.registerEmail(email);
+      
+      if (result.success) {
+        registerScreen.classList.add("hidden");
+        recordingScreen.classList.remove("hidden");
+        startAutoRecording();
+      } else {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Register Device";
+        errorMsg.innerText = result.error || "Failed to register. Are you invited?";
+      }
+    });
+  }
+}
+
+init();

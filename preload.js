@@ -7,5 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   finalizeRecording: () => ipcRenderer.invoke("finalize-recording"),
   onStopRecording: (callback) => ipcRenderer.on("stop-recording", callback),
   onPauseRecording: (callback) => ipcRenderer.on("pause-recording", callback),
-  onResumeRecording: (callback) => ipcRenderer.on("resume-recording", callback)
+  onResumeRecording: (callback) => ipcRenderer.on("resume-recording", callback),
+  checkRegistration: () => ipcRenderer.invoke("check-registration"),
+  registerEmail: (email) => ipcRenderer.invoke("register-email", email)
 });
