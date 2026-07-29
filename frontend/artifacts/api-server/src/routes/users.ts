@@ -234,4 +234,25 @@ router.post("/users/invite", async (req, res): Promise<void> => {
   }
 });
 
+router.delete("/users/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid user ID" });
+      return;
+    }
+
+    const result = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
+    if (result.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    res.status(500).json({ error: "Failed to delete user." });
+  }
+});
+
 export default router;

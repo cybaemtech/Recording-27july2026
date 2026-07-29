@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useListUsers, useInviteUser } from "@workspace/api-client-react";
-import { Search, UserPlus, Shield, ChevronUp, ChevronDown, ChevronsUpDown, User, Download, Monitor, Apple } from "lucide-react";
+import { useListUsers, useInviteUser, useDeleteUser } from "@workspace/api-client-react";
+import { Search, UserPlus, Shield, ChevronUp, ChevronDown, ChevronsUpDown, User, Download, Monitor, Apple, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 type SortField = "name" | "role" | "department" | "lastSeenAt" | "isOnline";
 type SortDir = "asc" | "desc";
@@ -56,6 +57,26 @@ export default function Users() {
       }
     }
   });
+
+  const queryClient = useQueryClient();
+  const { mutate: deleteUser } = useDeleteUser({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Success", description: "User deleted successfully." });
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+      },
+      onError: (err: any) => {
+        toast({ title: "Error", description: err?.response?.data?.error || "Failed to delete user.", variant: "destructive" });
+      }
+    }
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this user?")) {
+      deleteUser({ id });
+    }
+  };
 
   const handleInvite = () => {
     if (!inviteEmail) return;
@@ -259,18 +280,21 @@ export default function Users() {
                 <TableHead className="text-xs font-semibold text-slate-500 py-3.5 cursor-pointer select-none group" onClick={() => handleSort("lastSeenAt")}>
                   <span className="flex items-center group-hover:text-slate-700 transition-colors">Last Seen <SortIcon active={sortField === "lastSeenAt"} dir={sortDir} /></span>
                 </TableHead>
+                <TableHead className="text-xs font-semibold text-slate-500 py-3.5 pr-6 text-right">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-48 text-center text-slate-400 text-sm font-medium">
+                  <TableCell colSpan={6} className="h-48 text-center text-slate-400 text-sm font-medium">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-48 text-center text-slate-500 text-sm">
+                  <TableCell colSpan={6} className="h-48 text-center text-slate-500 text-sm">
                     No users found matching your criteria.
                   </TableCell>
                 </TableRow>
@@ -320,6 +344,11 @@ export default function Users() {
                     </TableCell>
                     <TableCell className="text-xs font-medium text-slate-500">
                       {user.lastSeenAt ? formatDistanceToNow(new Date(user.lastSeenAt), { addSuffix: true }) : "Never"}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={(e) => handleDelete(e, user.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

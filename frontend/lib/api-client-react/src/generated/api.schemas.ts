@@ -331,6 +331,10 @@ limit?: number;
 search?: string | null;
 };
 
+export type DeleteUser200 = {
+  success?: boolean;
+};
+
 export type ListDevicesParams = {
 page?: number;
 limit?: number;
@@ -342,5 +346,9 @@ userId?: number | null;
  * @nullable
  */
 os?: string | null;
+};
+
+export type DeleteDevice200 = {
+  success?: boolean;
 };
 

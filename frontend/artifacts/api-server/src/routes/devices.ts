@@ -140,4 +140,25 @@ router.get("/devices/:id", async (req, res): Promise<void> => {
   });
 });
 
+router.delete("/devices/:id", async (req, res): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid device ID" });
+      return;
+    }
+
+    const result = await db.delete(devicesTable).where(eq(devicesTable.id, id)).returning();
+    if (result.length === 0) {
+      res.status(404).json({ error: "Device not found" });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting device:", error);
+    res.status(500).json({ error: "Failed to delete device." });
+  }
+});
+
 export default router;

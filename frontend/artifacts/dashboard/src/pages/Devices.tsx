@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useListDevices } from "@workspace/api-client-react";
-import { Search, Terminal, ChevronUp, ChevronDown, ChevronsUpDown, Monitor, Smartphone, Server } from "lucide-react";
+import { useListDevices, useDeleteDevice } from "@workspace/api-client-react";
+import { Search, Terminal, ChevronUp, ChevronDown, ChevronsUpDown, Monitor, Smartphone, Server, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 function getOsIcon(os: string) {
   if (!os) return <Monitor className="w-3.5 h-3.5" />;
   const lower = os.toLowerCase();
@@ -29,6 +30,8 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 export default function Devices() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [osFilter, setOsFilter] = useState<string>("all");
@@ -36,6 +39,25 @@ export default function Devices() {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const limit = 20;
+
+  const { mutate: deleteDevice } = useDeleteDevice({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Success", description: "Device deleted successfully." });
+        queryClient.invalidateQueries({ queryKey: ["devices"] });
+      },
+      onError: (err: any) => {
+        toast({ title: "Error", description: err?.response?.data?.error || "Failed to delete device.", variant: "destructive" });
+      }
+    }
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this device?")) {
+      deleteDevice({ id });
+    }
+  };
 
   const params: any = {
     page,
@@ -152,18 +174,21 @@ export default function Devices() {
                 <TableHead className="text-xs font-semibold text-slate-500 py-3.5 cursor-pointer select-none group" onClick={() => handleSort("lastSeenAt")}>
                   <span className="flex items-center group-hover:text-slate-700 transition-colors">Last Seen <SortIcon active={sortField === "lastSeenAt"} dir={sortDir} /></span>
                 </TableHead>
+                <TableHead className="text-xs font-semibold text-slate-500 py-3.5 pr-6 text-right">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center text-slate-400 text-sm font-medium">
+                  <TableCell colSpan={7} className="h-48 text-center text-slate-400 text-sm font-medium">
                     Scanning endpoints...
                   </TableCell>
                 </TableRow>
               ) : devices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center text-slate-500 text-sm">
+                  <TableCell colSpan={7} className="h-48 text-center text-slate-500 text-sm">
                     No devices found matching your criteria.
                   </TableCell>
                 </TableRow>
@@ -208,6 +233,11 @@ export default function Devices() {
                     </TableCell>
                     <TableCell className="text-xs font-medium text-slate-500">
                       {device.lastSeenAt ? formatDistanceToNow(new Date(device.lastSeenAt), { addSuffix: true }) : "Never"}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={(e) => handleDelete(e, device.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

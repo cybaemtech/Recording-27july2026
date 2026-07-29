@@ -204,6 +204,18 @@ export const GetUserResponse = zod.object({
 
 
 /**
+ * @summary Delete user by ID
+ */
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteUserResponse = zod.object({
+  "success": zod.boolean().optional()
+})
+
+
+/**
  * @summary List all devices
  */
 export const listDevicesQueryPageDefault = 1;
@@ -258,6 +270,18 @@ export const GetDeviceResponse = zod.object({
   "avatarUrl": zod.string().nullish()
 }),
   "sessionCount": zod.number()
+})
+
+
+/**
+ * @summary Delete device by ID
+ */
+export const DeleteDeviceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteDeviceResponse = zod.object({
+  "success": zod.boolean().optional()
 })
 
 

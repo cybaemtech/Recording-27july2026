@@ -447,10 +447,10 @@ router.get("/sessions/:id/apps", async (req, res): Promise<void> => {
           category = "unproductive";
         }
 
-        appMap[appName] = { duration: 0, category };
+        appMap[appName] = { duration: durationSeconds, category };
+      } else {
+        appMap[appName].duration = Math.max(appMap[appName].duration, durationSeconds);
       }
-
-      appMap[appName].duration += durationSeconds;
     });
 
     const result = Object.entries(appMap).map(([name, data]) => ({
