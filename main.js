@@ -388,7 +388,21 @@ app.whenReady().then(() => {
 
   ipcMain.handle("register-email", async (event, email) => {
     try {
-      registeredEmail = email.trim();
+      const trimmedEmail = email.trim();
+      
+      // Verify email exists in Supabase users table
+      const userRes = await supabaseFetch(`${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(trimmedEmail)}&select=id`, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY }
+      }, "User Verification");
+      
+      const users = await userRes.json();
+
+      if (!users || users.length === 0) {
+        return { success: false, error: "This email address is not authorized. Please ask your administrator for an invite." };
+      }
+
+      registeredEmail = trimmedEmail;
       const configPath = path.join(app.getPath("userData"), "user_config.json");
       await fsPromises.writeFile(configPath, JSON.stringify({ email: registeredEmail }));
       // Immediately trigger live session and device creation now that we have an email

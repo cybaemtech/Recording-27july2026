@@ -403,7 +403,7 @@ router.get("/sessions/:id/apps", async (req, res): Promise<void> => {
         )
       );
 
-    const appMap: Record<string, { duration: number, category: string }> = {};
+    const appMap: Record<string, { durations: number[], category: string }> = {};
 
     logs.forEach(log => {
       if (!log.details) return;
@@ -428,13 +428,11 @@ router.get("/sessions/:id/apps", async (req, res): Promise<void> => {
         if (mMatch) durationSeconds += parseInt(mMatch[1]) * 60;
         if (sMatch) durationSeconds += parseInt(sMatch[1]);
         if (!hMatch && !mMatch && !sMatch) {
-          // just seconds if it's a plain number
           durationSeconds += parseInt(timeStr) || 0;
         }
       }
 
       if (!appMap[appName]) {
-        // Categorization heuristic
         const lowerName = appName.toLowerCase();
         let category = "neutral";
         
@@ -447,17 +445,30 @@ router.get("/sessions/:id/apps", async (req, res): Promise<void> => {
           category = "unproductive";
         }
 
-        appMap[appName] = { duration: durationSeconds, category };
-      } else {
-        appMap[appName].duration = Math.max(appMap[appName].duration, durationSeconds);
+        appMap[appName] = { durations: [], category };
       }
+
+      appMap[appName].durations.push(durationSeconds);
     });
 
-    const result = Object.entries(appMap).map(([name, data]) => ({
-      name,
-      duration: data.duration,
-      category: data.category
-    })).sort((a, b) => b.duration - a.duration);
+    const result = Object.entries(appMap).map(([name, data]) => {
+      const maxDur = Math.max(...data.durations);
+      const minDur = Math.min(...data.durations);
+      
+      // If the app was opened long before the session started, the minimum duration will be high.
+      // We subtract the min duration to only account for the time spent DURING the session.
+      // If minDur is very small, it means the app was opened during the session, so we don't need to subtract it.
+      let sessionDuration = maxDur;
+      if (minDur > 60) {
+        sessionDuration = maxDur - minDur;
+      }
+
+      return {
+        name,
+        duration: sessionDuration,
+        category: data.category
+      };
+    }).sort((a, b) => b.duration - a.duration);
 
     res.json(result);
   } catch (err: any) {
